@@ -1,0 +1,59 @@
+name: win
+on: { push: {}, workflow_dispatch: {} }
+jobs:
+  windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { dir: CZ,    target: JWCZ,   name: JW-CZ }
+          - { dir: Mini,  target: JWMINI, name: JW-MINI }
+          - { dir: SEM,   target: JWSEM,  name: JW-SEM }
+          - { dir: P5,    target: JWP5,   name: JW-5P }
+          - { dir: JUNO,  target: JWJUNO, name: JW-JUN }
+          - { dir: OBX,   target: JWOBX,  name: JW-OBI }
+          - { dir: JUP,   target: JWJUP,  name: JW-JUP }
+          - { dir: MS20,  target: JWMS20, name: JW-20M }
+          - { dir: CS80,  target: JWCS80, name: JW-CS80 }
+          - { dir: PPG,   target: JWPPG,  name: JW-PPG }
+          - { dir: _2600, target: JW2600, name: JW-2600 }
+          - { dir: MEM,   target: JWMEM,  name: JW-MEM }
+          - { dir: D50,   target: JWD50,  name: JW-D50 }
+          - { dir: MX12,  target: JWMX12, name: JW-MX12 }
+          - { dir: OSC,   target: JWOSC,  name: JW-OSC }
+          - { dir: VCS,   target: JWVCS,  name: JW-VCS }
+          - { dir: ODY,   target: JWODY,  name: JW-ODY }
+          - { dir: NL,    target: JWNL,   name: JW-NL }
+          - { dir: JX,    target: JWJX,   name: JW-JX }
+          - { dir: M1,    target: JWM1,   name: JW-M1 }
+          - { dir: VS,    target: JWVS,   name: JW-VS }
+          - { dir: FIZ,   target: JWFIZ,  name: JW-FIZ }
+          - { dir: DX,    target: JWDX,   name: JW-DX }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get JUCE
+        run: git clone --depth 1 https://github.com/juce-framework/JUCE.git JUCE
+      - name: Configure (static MSVC runtime)
+        run: cmake -B ${{ matrix.dir }}/_cmake -S ${{ matrix.dir }} -DJUCE_PATH="${{ github.workspace }}/JUCE" -DCMAKE_BUILD_TYPE=Release -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
+      - name: Build VST3 + Standalone
+        run: cmake --build ${{ matrix.dir }}/_cmake --config Release --target ${{ matrix.target }}_VST3 ${{ matrix.target }}_Standalone
+      - name: pluginval
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip" -OutFile pv.zip
+          Expand-Archive -Path pv.zip -DestinationPath pv -Force
+          $vst3 = "${{ matrix.dir }}/_cmake/${{ matrix.target }}_artefacts/Release/VST3/${{ matrix.name }}.vst3"
+          if (-not (Test-Path $vst3)) { Write-Error "VST3 not found: $vst3"; exit 1 }
+          $proc = Start-Process -FilePath ".\pv\pluginval.exe" -ArgumentList @("--strictness-level","5","--timeout-ms","120000","--skip-gui-tests","--validate",$vst3) -Wait -PassThru -NoNewWindow
+          if ($proc.ExitCode -ne 0) { Write-Error "pluginval FAILED (exit $($proc.ExitCode))"; exit 1 }
+          Write-Host "pluginval PASSED ${{ matrix.name }}"
+      - name: Collect artifacts (NAME.exe + NAME.vst3)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $R = "${{ matrix.dir }}/_cmake/${{ matrix.target }}_artefacts/Release"
+          Copy-Item -Recurse -Force "$R/VST3/${{ matrix.name }}.vst3" out/ -ErrorAction SilentlyContinue
+          Copy-Item -Force "$R/Standalone/${{ matrix.name }}.exe" out/ -ErrorAction SilentlyContinue
+      - uses: actions/upload-artifact@v4
+        with: { name: "${{ matrix.name }}-Windows", path: out }
