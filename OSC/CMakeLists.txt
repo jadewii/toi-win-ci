@@ -72,17 +72,12 @@ add_compile_definitions (
     CMAJOR_DLL=1
 )
 
-file(GLOB_RECURSE HEADERS
-    ../_shared/include/*.h
-)
+
 
 target_sources(JWOSC PRIVATE
     cmajor_plugin.cpp
-    ${HEADERS}
+    
 )
-
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/" FILES ${HEADERS})
-
 target_compile_features(JWOSC PRIVATE cxx_std_17)
 
 target_include_directories(JWOSC PRIVATE ../_shared/include ../_shared/include/choc)
